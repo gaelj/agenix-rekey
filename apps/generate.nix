@@ -73,7 +73,7 @@ let
           secret.rekeyFile != null
         ) "Host ${host}: age.secrets.${secretName}: `rekeyFile` must be set when using a generator.";
         relativeToFlake secret.rekeyFile;
-      script = secret.generator._script {
+      script = secret.generator._script rec {
         inherit secret pkgs;
         inherit (pkgs) lib;
         file = sourceFile;
@@ -84,6 +84,7 @@ let
           name = dep.id;
           file = relativeToFlake dep.rekeyFile;
         });
+        decryptDep = name: ''"$(${decrypt} ${lib.escapeShellArg deps."${name}".file})"'';
       };
     in
     # Filter secrets that don't need to be generated

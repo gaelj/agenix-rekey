@@ -147,6 +147,7 @@ let
                      #   You can extract the plaintext with `''${decrypt} ''${escapeShellArg dep.file}`.
             decrypt, # The base rage command that can decrypt secrets to stdout by
                      #   using the defined `masterIdentities`.
+            decryptDep, # Macro command to decrypt and escape a secret by its name.
             ...      # For future/unused arguments
           }: '''
             priv=$(''${pkgs.wireguard-tools}/bin/wg genkey)

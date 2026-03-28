@@ -22,6 +22,8 @@ pkgs.writeShellScriptBin "agenix-edit-view" ''
     echo "Usage: agenix $app [OPTIONS] [FILE]"
     if [[ $app == "edit" ]]; then
       echo 'Create/edit/view age secret files with $EDITOR, fzf and your master identity'
+    elif [[ $app == "dump" ]]; then
+      echo 'Decrypt and print all .age secrets in a directory to stdout'
     else
       echo 'View age secret files with fzf and your master identity'
     fi
@@ -37,12 +39,16 @@ pkgs.writeShellScriptBin "agenix-edit-view" ''
       echo '                            Can be insecure, as the secrets are shown in plain-text.'
     fi
     echo ""
-    if [[ $app == "edit" ]]; then
+    if [[ $app == "dump" ]]; then
+      echo "DIR     Directory containing .age files to decrypt and print."
+      echo '          Defaults to the current directory if not given.'
+    elif [[ $app == "edit" ]]; then
       echo "FILE    An age-encrypted file to edit or a new file to create."
+      echo '          If not given, a fzf selector of used secrets will be shown.'
     else
       echo "FILE    An age-encrypted file to view."
+      echo '          If not given, a fzf selector of used secrets will be shown.'
     fi
-    echo '          If not given, a fzf selector of used secrets will be shown.'
   }
 
   if [[ ! -e flake.nix ]] ; then
@@ -60,6 +66,9 @@ pkgs.writeShellScriptBin "agenix-edit-view" ''
         ;;
       "edit")
         app="edit"
+        ;;
+      "dump")
+        app="dump"
         ;;
       "help"|"--help"|"-help"|"-h")
         show_help "$app"
@@ -90,26 +99,57 @@ pkgs.writeShellScriptBin "agenix-edit-view" ''
   # If file is not given, show fzf
   case "''${#POSITIONAL_ARGS[@]}" in
     0)
-      ${optionalString (builtins.length validRelativeSecretPaths == 0) ''
-        die "No relevant secret definitions were found for any host. Pass a filename to create a new secret regardless of whether it is already used."
-        break
-      ''}
-      if [[ "$preview" == 1 ]]; then
-        FILE=$(echo ${escapeShellArg (concatStringsSep "\n" validRelativeSecretPaths)} \
-          | ${pkgs.fzf}/bin/fzf --preview "bash -c 'agenix view {1} 2> /dev/null'" --tiebreak=end --bind=tab:down,btab:up,change:top --height='~50%' --tac --cycle --layout=reverse) \
-          || die "No file selected. Aborting."
+      if [[ $app == "dump" ]]; then
+        DIR="."
       else
-        FILE=$(echo ${escapeShellArg (concatStringsSep "\n" validRelativeSecretPaths)} \
-          | ${pkgs.fzf}/bin/fzf --tiebreak=end --bind=tab:down,btab:up,change:top --height='~50%' --tac --cycle --layout=reverse) \
-          || die "No file selected. Aborting."
+        ${optionalString (builtins.length validRelativeSecretPaths == 0) ''
+          die "No relevant secret definitions were found for any host. Pass a filename to create a new secret regardless of whether it is already used."
+          break
+        ''}
+        if [[ "$preview" == 1 ]]; then
+          FILE=$(echo ${escapeShellArg (concatStringsSep "\n" validRelativeSecretPaths)} \
+            | ${pkgs.fzf}/bin/fzf --preview "bash -c 'agenix view {1} 2> /dev/null'" --tiebreak=end --bind=tab:down,btab:up,change:top --height='~50%' --tac --cycle --layout=reverse) \
+            || die "No file selected. Aborting."
+        else
+          FILE=$(echo ${escapeShellArg (concatStringsSep "\n" validRelativeSecretPaths)} \
+            | ${pkgs.fzf}/bin/fzf --tiebreak=end --bind=tab:down,btab:up,change:top --height='~50%' --tac --cycle --layout=reverse) \
+            || die "No file selected. Aborting."
+        fi
       fi
     ;;
-    1) FILE="''${POSITIONAL_ARGS[0]}" ;;
+    1)
+      if [[ $app == "dump" ]]; then
+        DIR="''${POSITIONAL_ARGS[0]}"
+        [[ -d "$DIR" ]] || die "Not a directory: '$DIR'"
+      else
+        FILE="''${POSITIONAL_ARGS[0]}"
+      fi
+    ;;
     *)
       show_help "$app"
       exit 1
       ;;
   esac
+
+  if [[ $app == "dump" ]]; then
+    found=0
+    while IFS= read -r -d "" age_file; do
+      found=1
+      echo "[1;34m=== $age_file ===[m"
+      CLEARTEXT_FILE=$(${pkgs.coreutils}/bin/mktemp)
+      trap "rm -f '$CLEARTEXT_FILE'" EXIT
+      if ${ageMasterDecrypt} -o "$CLEARTEXT_FILE" "$age_file" 2>/dev/null; then
+        ${pkgs.coreutils}/bin/cat "$CLEARTEXT_FILE"
+      else
+        echo "[1;31m[decryption failed][m" >&2
+      fi
+      rm -f "$CLEARTEXT_FILE"
+      echo ""
+    done < <(find "$DIR" -maxdepth 1 -name "*.age" -print0 | sort --zero-terminated)
+    [[ $found -eq 1 ]] || echo "No .age files found in '$DIR'."
+    exit 0
+  fi
+
   [[ "$FILE" != *".age" ]] && echo "[1;33mwarning:[m secrets should use the .age suffix by convention"
 
   # Extract suffix before .age, if there is any.

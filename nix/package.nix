@@ -17,6 +17,7 @@ writeShellScriptBin "agenix" ''
     echo 'COMMANDS:'
     echo '  rekey                   Re-encrypts secrets for hosts that require them.'
     echo '  view                    Print age secret files to stdout with your master identity'
+    echo '  dump                    Print all age secret files of the specified directory to stdout with your master identity'
     echo '  edit                    Create/edit age secret files with $EDITOR and your master identity'
     echo '  generate                Automatically generates secrets that have generators'
     echo '  update-masterkeys       Update all stored secrets with a new set of masterkeys'
@@ -93,6 +94,7 @@ writeShellScriptBin "agenix" ''
           ++ [
             "view"
             "edit"
+            "dump"
           ]
         )
       })
@@ -101,6 +103,9 @@ writeShellScriptBin "agenix" ''
           APP="edit-view"
         elif [[ "$1" == "view" ]]; then
           PASS_THRU_ARGS+=("$1" "--preview")
+          APP="edit-view"
+        elif [[ "$1" == "dump" ]]; then
+          PASS_THRU_ARGS+=("$1")
           APP="edit-view"
         else
           APP="$1"

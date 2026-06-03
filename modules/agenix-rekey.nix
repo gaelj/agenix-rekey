@@ -14,7 +14,6 @@ let
     filter
     flatten
     flip
-    getExe
     hasAttr
     hasPrefix
     hasSuffix
@@ -54,18 +53,31 @@ let
 
   # A decryptable dummy secret that is used as a replacement when a secret specifies `intermediary = true`.
   pubkeyOpt = x: if isAbsolutePath x then "-R ${escapeShellArg x}" else "-r ${escapeShellArg x}";
-  dummySecret = pkgs.runCommand "generate-dummy-secret-${target}.age" { } ''
-    ${getExe pkgs.rage} -e ${pubkeyOpt (removeSuffix "\n" config.age.rekey.hostPubkey)} -o "$out" <<EOF
-    # This is a dummy secret.
-    # It was placed here because the original secret is an intermediary secret.
-    EOF
-  '';
-  placeholderSecret = pkgs.runCommand "generate-placeholder-secret-${target}.age" { } ''
-    ${getExe pkgs.rage} -e ${pubkeyOpt (removeSuffix "\n" config.age.rekey.hostPubkey)} -o "$out" <<EOF
-    # This is a placeholder secret.
-    # It was placed here because the host public key is of a dummy (placeholder) value.
-    EOF
-  '';
+  pluginPackages = config.age.rekey.agePlugins or [ ];
+
+  dummySecret =
+    pkgs.runCommand "generate-dummy-secret-${target}.age"
+      {
+        nativeBuildInputs = [ pkgs.rage ] ++ pluginPackages;
+      }
+      ''
+        rage -e ${pubkeyOpt (removeSuffix "\n" config.age.rekey.hostPubkey)} -o "$out" <<EOF
+        # This is a dummy secret.
+        # It was placed here because the original secret is an intermediary secret.
+        EOF
+      '';
+
+  placeholderSecret =
+    pkgs.runCommand "generate-placeholder-secret-${target}.age"
+      {
+        nativeBuildInputs = [ pkgs.rage ] ++ pluginPackages;
+      }
+      ''
+        rage -e ${pubkeyOpt (removeSuffix "\n" config.age.rekey.hostPubkey)} -o "$out" <<EOF
+        # This is a placeholder secret.
+        # It was placed here because the host public key is of a dummy (placeholder) value.
+        EOF
+      '';
 
   rekeyedLocalSecret =
     secret:
@@ -107,7 +119,7 @@ let
             (listOf unspecified)
             (attrsOf unspecified)
           ];
-        example = literalExpression ''[ config.age.secrets.basicAuthPw1 nixosConfigurations.machine2.config.age.secrets.basicAuthPw ]'';
+        example = literalExpression "[ config.age.secrets.basicAuthPw1 nixosConfigurations.machine2.config.age.secrets.basicAuthPw ]";
         default = [ ];
         description = ''
           Other secrets on which this secret depends. This guarantees that in the final

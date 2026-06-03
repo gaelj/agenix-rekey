@@ -14,6 +14,7 @@ let
     filter
     flatten
     flip
+    getExe
     hasAttr
     hasPrefix
     hasSuffix
@@ -53,15 +54,13 @@ let
 
   # A decryptable dummy secret that is used as a replacement when a secret specifies `intermediary = true`.
   pubkeyOpt = x: if isAbsolutePath x then "-R ${escapeShellArg x}" else "-r ${escapeShellArg x}";
-  pluginPackages = config.age.rekey.agePlugins or [ ];
-
   dummySecret =
     pkgs.runCommand "generate-dummy-secret-${target}.age"
       {
-        nativeBuildInputs = [ pkgs.rage ] ++ pluginPackages;
+        nativeBuildInputs = [ pkgs.age ] ++ config.age.rekey.agePlugins;
       }
       ''
-        rage -e ${pubkeyOpt (removeSuffix "\n" config.age.rekey.hostPubkey)} -o "$out" <<EOF
+        ${getExe pkgs.rage} -e ${pubkeyOpt (removeSuffix "\n" config.age.rekey.hostPubkey)} -o "$out" <<EOF
         # This is a dummy secret.
         # It was placed here because the original secret is an intermediary secret.
         EOF
@@ -70,10 +69,10 @@ let
   placeholderSecret =
     pkgs.runCommand "generate-placeholder-secret-${target}.age"
       {
-        nativeBuildInputs = [ pkgs.rage ] ++ pluginPackages;
+        nativeBuildInputs = [ pkgs.age ] ++ config.age.rekey.agePlugins;
       }
       ''
-        rage -e ${pubkeyOpt (removeSuffix "\n" config.age.rekey.hostPubkey)} -o "$out" <<EOF
+        ${getExe pkgs.rage} -e ${pubkeyOpt (removeSuffix "\n" config.age.rekey.hostPubkey)} -o "$out" <<EOF
         # This is a placeholder secret.
         # It was placed here because the host public key is of a dummy (placeholder) value.
         EOF
